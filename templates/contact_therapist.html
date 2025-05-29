@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Contact Therapist</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to right, #f9f9f9, #e3f2fd);
+      padding: 20px;
+      margin: 0;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 25px;
+      background: white;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+      border-radius: 12px;
+    }
+
+    h2 {
+      color: #0077b6;
+      margin-bottom: 20px;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    li {
+      background: #f0f8ff;
+      padding: 15px;
+      margin-bottom: 12px;
+      border-left: 6px solid #0077b6;
+      border-radius: 6px;
+    }
+
+    li strong {
+      font-size: 1.1em;
+      color: #023e8a;
+    }
+
+    a {
+      color: #0077b6;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .btn {
+      display: inline-block;
+      margin-top: 25px;
+      padding: 12px 24px;
+      background-color: #0077b6;
+      color: white;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: background-color 0.3s;
+    }
+
+    .btn:hover {
+      background-color: #005f87;
+    }
+
+    .no-data {
+      text-align: center;
+      font-size: 1.1em;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Recommended Therapists Near You</h2>
+    {% if therapists %}
+      <ul>
+        {% for therapist in therapists %}
+          <li>
+            <strong>{{ therapist.name }}</strong><br>
+            📍 {{ therapist.address }}<br>
+            ⭐ {{ therapist.rating }} ({{ therapist.user_ratings_total }} reviews)<br>
+            <a href="{{ therapist.link }}" target="_blank">View on Google Maps</a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="no-data">⚠️ No therapists available at the moment. Please check back later.</p>
+    {% endif %}
+  </div>
+
+  <div class="container" style="margin-top: 30px;">
+    <h2>Emergency Contact Options</h2>
+    <p>If you're experiencing a mental health crisis, please use one of the following options:</p>
+    <ul>
+      <li><strong>📞 Call:</strong> 1-800-THERAPY (example)</li>
+      <li><strong>📧 Email:</strong> <a href="mailto:therapist@support.org">therapist@support.org</a></li>
+      <li><strong>💬 Live Chat:</strong> <a href="https://www.betterhelp.com" target="_blank">Visit BetterHelp</a></li>
+    </ul>
+    <a href="{{ url_for('views.dashboard') }}" class="btn">← Back to Dashboard</a>
+  </div>
+</body>
+</html>

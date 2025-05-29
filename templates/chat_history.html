@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chat History - Mental Health Chatbot</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="bg">
+    <div class="container fade-in">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+
+        <h1 class="title">📜 Chat History</h1>
+        <div class="history-box" id="historyBox">
+            {% if chat_history %}
+                {% for chat in chat_history %}
+                    <div class="message-block {{ chat.sender }}">
+                        <div class="message-content">
+                            {% if chat.sender == 'user' %}
+                                <span class="sender">You</span>
+                            {% else %}
+                                <span class="sender">Bot</span>
+                            {% endif %}
+                            <span class="timestamp">{{ chat.timestamp }}</span>
+                            <p class="message">{{ chat.message }}</p>
+                            {% if chat.mood %}
+                                <span class="mood">Mood: {{ chat.mood }} {{ mood_emojis[chat.mood] }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="no-history">No chat history found.</p>
+            {% endif %}
+        </div>
+
+        <div class="export-buttons">
+            <form action="/export/csv" method="post">
+                <button type="submit">📁 Export CSV</button>
+            </form>
+            <form action="/export/json" method="post">
+                <button type="submit">🧾 Export JSON</button>
+            </form>
+            <form action="/export/pdf" method="post">
+                <button type="submit">🖨 Export PDF</button>
+            </form>
+            <a href="/" class="back-button">⬅️ Back to Chat</a>
+        </div>
+    </div>
+</body>
+</html>

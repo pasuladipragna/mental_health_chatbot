@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mood Trends</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 1rem;
+      gap: 1rem;
+    }
+    .btn, select {
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-weight: bold;
+      border: 1px solid #ccc;
+      cursor: pointer;
+    }
+    canvas {
+      margin-top: 20px;
+    }
+    .alert {
+      padding: 10px;
+      margin-bottom: 15px;
+      border: 1px solid;
+      border-radius: 4px;
+    }
+    .alert-warning {
+      background-color: #fff3cd;
+      border-color: #ffeeba;
+      color: #856404;
+    }
+    .alert-success {
+      background-color: #d4edda;
+      border-color: #c3e6cb;
+      color: #155724;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Your Mood Trends</h2>
+    <div class="container fade-in">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-messages">
+              {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+
+
+    <div class="controls">
+      <a href="/" class="btn">Back to Chat</a>
+
+      <div>
+        <label for="filter">Filter:</label>
+        <select id="filter">
+          <option value="all">All</option>
+          <option value="week">Last 7 Days</option>
+          <option value="month">Last 30 Days</option>
+        </select>
+      </div>
+
+      <button class="btn" onclick="downloadPNG()">Download PNG</button>
+      <button class="btn" onclick="downloadPDF()">Export as PDF</button>
+      <button class="btn" onclick="downloadJSON()">Export as JSON</button>
+    </div>
+
+    <canvas id="moodChart" width="400" height="200"></canvas>
+    <p id="suggestion" style="margin-top: 20px; font-weight: bold;"></p>
+  </div>
+
+  <script>
+  let moodData = [];
+  fetch("/mood-trends/data")
+    .then(response => response.json())
+    .then(data => {
+    // Convert dates to timestamps
+    moodData = data.map(item => ({
+      ...item,
+      timestamp: item.date // Rename for consistency if needed
+    }));
+    renderChart(moodData);
+  })
+  .catch(error => {
+    document.getElementById("suggestion").innerText = "⚠️ Failed to load mood data.";
+    console.error("Error loading mood data:", error);
+  });
+
+
+
+    const moodScoresMap = {
+      "stressed": 0,
+      "sad": 1,
+      "neutral": 2,
+      "happy": 3
+    };
+    const moodEmojis = {
+      "stressed": "😰",
+      "sad": "😢",
+      "neutral": "😐",
+      "happy": "😊"
+    };
+    const reverseMood = ["Stressed", "Sad", "Neutral", "Happy"];
+
+    function filterData(days) {
+      const now = new Date();
+      return moodData.filter(entry => {
+        const entryDate = new Date(entry.timestamp);
+        const diffDays = (now - entryDate) / (1000 * 60 * 60 * 24);
+        return diffDays <= days;
+      });
+    }
+
+    function computeAverage(data) {
+      const scores = data.map(m => moodScoresMap[m.mood]);
+      return scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+    }
+
+    function getSuggestion(avg) {
+      if (avg >= 2.5) return "😊 You're doing great! Keep it up!";
+      if (avg >= 1.5) return "😐 Hang in there! Try relaxation or hobbies.";
+      return "😢 You might benefit from talking to someone or professional help.";
+    }
+
+    function renderChart(data) {
+      const labels = data.map(m => m.timestamp);
+      const scores = data.map(m => moodScoresMap[m.mood]);
+      const avg = computeAverage(data);
+      document.getElementById("suggestion").innerText = getSuggestion(avg);
+
+      if (window.moodChart) window.moodChart.destroy();
+
+      const ctx = document.getElementById('moodChart').getContext('2d');
+      window.moodChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Mood Over Time',
+              data: scores,
+              borderColor: 'rgba(75, 192, 192, 1)',
+              backgroundColor: 'rgba(75, 192, 192, 0.2)',
+              fill: true,
+              tension: 0.4,
+              pointRadius: 6,
+              pointHoverRadius: 8
+            },
+            {
+              label: 'Average Mood',
+              data: Array(scores.length).fill(avg),
+              borderColor: 'rgba(255, 99, 132, 1)',
+              borderDash: [5, 5],
+              fill: false,
+              pointRadius: 0
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              min: 0,
+              max: 3,
+              ticks: {
+                callback: value => reverseMood[value] || value
+              },
+              title: { display: true, text: 'Mood Level' }
+            }
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: context => {
+                  const mood = reverseMood[context.raw];
+                  const emoji = Object.entries(moodScoresMap).find(([k, v]) => v === context.raw)?.[0];
+                  return `Mood: ${moodEmojis[emoji]} ${mood}`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Download PNG
+    function downloadPNG() {
+      const link = document.createElement('a');
+      link.href = moodChart.toBase64Image();
+      link.download = 'mood_trend.png';
+      link.click();
+    }
+
+    // Download PDF
+    function downloadPDF() {
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF();
+      const imgData = moodChart.toBase64Image();
+      pdf.addImage(imgData, 'PNG', 15, 40, 180, 100);
+      pdf.save('mood_trend.pdf');
+    }
+
+    function downloadJSON() {
+      const blob = new Blob([JSON.stringify(moodData, null, 2)], { type: "application/json" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "mood_trends.json";
+      link.click();
+    }
+
+    document.getElementById("filter").addEventListener("change", (e) => {
+      const filter = e.target.value;
+      let filtered = moodData;
+      if (filter === "week") filtered = filterData(7);
+      else if (filter === "month") filtered = filterData(30);
+      renderChart(filtered);
+    });
+
+    // Initial render
+    renderChart(moodData);
+  </script>
+</body>
+</html>

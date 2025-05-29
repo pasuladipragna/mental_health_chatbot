@@ -1,0 +1,7 @@
+from huggingface_hub import create_repo
+
+create_repo(
+    name="chatbot-model",
+    repo_type="model",
+    private=False  # Set to True if you want it private
+)
