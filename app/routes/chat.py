@@ -1,33 +1,12 @@
 from flask import Blueprint, request, jsonify, session, render_template, current_app
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer as EmotionTokenizer
-import json, traceback, os
+from flask_login import current_user, login_required
 from pathlib import Path
 from ..models import db, MoodLog, ChatLog
-from .views import login_required
-from app.database import db
-from flask import current_app
-from flask_login import current_user
-from model_loader import load_models, chatbot_model, chatbot_tokenizer, emotion_classifier
+import traceback, json
 
 chat_bp = Blueprint('chat_bp', __name__)
 
-
-# Load chatbot model
-model_path = os.getenv("CHATBOT_MODEL_PATH", r"C:\Users\Pasul\OneDrive\Documents\Desktop\mental_health_chatbot\chatbot_model_small")
-model = AutoModelForCausalLM.from_pretrained(model_path)
-tokenizer = AutoTokenizer.from_pretrained(model_path)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = model.to(device)
-
-# Load emotion classifier
-emotion_model_id = "j-hartmann/emotion-english-distilroberta-base"
-emotion_tokenizer = EmotionTokenizer.from_pretrained(emotion_model_id)
-emotion_model = AutoModelForSequenceClassification.from_pretrained(emotion_model_id)
-emotion_classifier = pipeline("text-classification", model=emotion_model, tokenizer=emotion_tokenizer, top_k=1)
-
-# Emojis and tips
+# Mood emojis and tips
 mood_emojis = {
     'joy': '😊', 'sadness': '😢', 'anger': '😠', 'fear': '😨',
     'love': '❤️', 'surprise': '😲', 'neutral': '😐'
@@ -43,26 +22,33 @@ tips = {
 }
 
 @chat_bp.route("/api/chat", methods=["POST"])
-#@login_required
+@login_required
 def chat():
-    load_models()  # Ensure models are loaded
     try:
+        tokenizer = current_app.config["chatbot_tokenizer"]
+        model = current_app.config["chatbot_model"]
+        emotion_classifier = current_app.config["emotion_classifier"]
+        device = current_app.config["device"]
+
         user_input = request.json.get("message", "").strip()
         if not user_input:
             return jsonify({"error": "Empty message"}), 400
         if len(user_input) > 300:
             return jsonify({"error": "Message too long. Please limit to 300 characters."}), 400
 
+        # Load session history
         if "chat_history" not in session:
             session["chat_history"] = []
-
         chat_history = session["chat_history"][-10:]
+
+        # Build prompt
         full_convo = ""
         for i, msg in enumerate(chat_history):
             speaker = "User" if i % 2 == 0 else "Bot"
             full_convo += f"{speaker}: {msg} {tokenizer.eos_token} "
         full_convo += f"User: {user_input} {tokenizer.eos_token}"
 
+        # Tokenize and generate
         inputs = tokenizer(full_convo, return_tensors='pt', padding=True, truncation=True)
         input_ids = inputs['input_ids'].to(device)
         attention_mask = inputs['attention_mask'].to(device)
@@ -81,6 +67,7 @@ def chat():
 
         bot_output = cleaned_output
 
+        # Detect mood
         try:
             emotion_result = emotion_classifier(user_input)[0]
             mood = emotion_result['label'].lower()
@@ -92,16 +79,15 @@ def chat():
         if tip and tip not in bot_output:
             bot_output += f" {emoji_icon} {tip}"
 
+        # Update session
         session["chat_history"] = (session.get("chat_history", []) + [user_input, bot_output])[-10:]
-        session['last_detected_mood'] = mood
+        session["last_detected_mood"] = mood
         session.modified = True
 
-        # ✅ Save logs to DB using current_user.id
+        # Save logs
         user_id = current_user.id
-        chat_log = ChatLog(user_id=user_id, user_input=user_input, bot_response=bot_output, mood=mood)
-        db.session.add(chat_log)
-        mood_log = MoodLog(user_id=user_id, mood=mood)
-        db.session.add(mood_log)
+        db.session.add(ChatLog(user_id=user_id, user_input=user_input, bot_response=bot_output, mood=mood))
+        db.session.add(MoodLog(user_id=user_id, mood=mood))
         db.session.commit()
 
         return jsonify({
@@ -115,16 +101,18 @@ def chat():
         current_app.logger.error("[CHAT ERROR] %s", traceback.format_exc())
         return jsonify({"error": "Internal server error."}), 500
 
-@chat_bp.route('/reset_chat', methods=['POST'])
+
+@chat_bp.route("/reset_chat", methods=["POST"])
 @login_required
 def reset_chat():
     try:
-        session.pop('chat_history', None)
-        session.pop('mood_log', None)
+        session.pop("chat_history", None)
+        session.pop("mood_log", None)
         session.modified = True
         return jsonify({"status": "reset", "message": "Chat session cleared."}), 200
     except Exception:
         return jsonify({"error": "Failed to reset chat"}), 500
+
 
 @chat_bp.route("/contact_therapist")
 @login_required
@@ -135,15 +123,6 @@ def contact_therapist():
         if path.exists():
             with path.open("r", encoding="utf-8") as f:
                 therapists = json.load(f)
-    except Exception as e:
+    except Exception:
         therapists = []
-
     return render_template("contact_therapist.html", therapists=therapists)
-
-def start_therapist_scheduler():
-    # Placeholder for background job initialization
-    pass
-
-start_therapist_scheduler()
-
-print("[INFO] Chatbot and emotion classifier loaded successfully on", device)

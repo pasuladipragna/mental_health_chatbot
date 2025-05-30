@@ -6,39 +6,31 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_session import Session
 from flask_cors import CORS
-from dotenv import load_dotenv
-from pathlib import Path
+from flask_login import LoginManager
+from flask_admin import Admin
+from flask_admin.contrib.sqla import ModelView
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from dotenv import load_dotenv
 
 from app.routes import register_routes
 from app.database import db
 from app.models import User, ChatLog
 from config import DevelopmentConfig, TestingConfig, ProductionConfig
-from flask_login import LoginManager
-from app import create_app
 from app.scheduler import start_scheduler
-from flask_admin import Admin
-from flask_admin.contrib.sqla import ModelView
 from model_loader import load_models
 
-
-
-# LoginManager setup will be done inside create_app()
-
-# Load user from user_id
-
-
+# Ignore FutureWarnings from dependencies
 warnings.filterwarnings("ignore", category=FutureWarning)
+
+# Load .env environment variables
 load_dotenv()
 
 def create_app():
     app = Flask(__name__)
-    app.secret_key = 'secret-key'  # REQUIRED for login sessions
+    app.secret_key = os.getenv('SECRET_KEY', 'default-secret-key')
 
-    def load_user(user_id):
-        return db.session.get(User, int(user_id))
-
-    # Config based on FLASK_ENV
+    # Determine environment and load corresponding config
     env = os.getenv("FLASK_ENV", "development")
     if env == "production":
         app.config.from_object(ProductionConfig)
@@ -47,29 +39,30 @@ def create_app():
     else:
         app.config.from_object(DevelopmentConfig)
 
-    # Create session folder if not exists
-    session_dir = Path(app.config['SESSION_FILE_DIR'])
-    session_dir.mkdir(parents=True, exist_ok=True)
+    # Create session directory if needed
+    Path(app.config['SESSION_FILE_DIR']).mkdir(parents=True, exist_ok=True)
 
-    # Initialize extensions
+    # Initialize Flask extensions
     db.init_app(app)
-    migrate = Migrate(app, db)
-
+    Migrate(app, db)
     Session(app)
 
-    # Setup LoginManager
+    # Login manager setup
     login_manager = LoginManager()
     login_manager.init_app(app)
-    login_manager.login_view = 'auth.login'  # or your login route
-    login_manager.user_loader(load_user)
+    login_manager.login_view = 'auth.login'
 
-    # Enable CORS (restrict origins in prod)
+    @login_manager.user_loader
+    def load_user(user_id):
+        return db.session.get(User, int(user_id))
+
+    # Enable CORS (restrict in production)
     if env == "production":
         CORS(app, origins=["https://Mind-Ease.com"])
     else:
         CORS(app)
 
-    # Setup logging
+    # Setup file logging for production
     if not app.debug and not app.testing:
         log_dir = Path("logs")
         log_dir.mkdir(exist_ok=True)
@@ -79,7 +72,7 @@ def create_app():
         file_handler.setFormatter(formatter)
         app.logger.addHandler(file_handler)
 
-    # Register blueprints
+    # Register routes (Blueprints)
     register_routes(app)
 
     # Register error handlers
@@ -98,13 +91,21 @@ def create_app():
     admin.add_view(ModelView(User, db.session))
     admin.add_view(ModelView(ChatLog, db.session))
 
+    # Load models into memory and attach to app config
+    chatbot_tokenizer, chatbot_model, emotion_classifier = load_models()
+    app.config['chatbot_tokenizer'] = chatbot_tokenizer
+    app.config['chatbot_model'] = chatbot_model
+    app.config['emotion_classifier'] = emotion_classifier
+
     return app
 
 
 if __name__ == "__main__":
     app = create_app()
-    load_models()
     start_scheduler()
-    debug_mode = os.getenv("FLASK_ENV", "development") != "production"
-    app.run(debug=debug_mode, host="0.0.0.0", port=5000, use_reloader=False)
-
+    app.run(
+        debug=os.getenv("FLASK_ENV", "development") != "production",
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 5000)),
+        use_reloader=False
+    )
