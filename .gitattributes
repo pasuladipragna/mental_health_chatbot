@@ -4,3 +4,4 @@
 *.txt text eol=lf
 *.sh text eol=lf
 *.safetensors filter=lfs diff=lfs merge=lfs -text
+chatbot_model_small/* filter=lfs diff=lfs merge=lfs -text

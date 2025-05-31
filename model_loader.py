@@ -13,7 +13,8 @@ def load_models():
     if chatbot_model is None or chatbot_tokenizer is None:
         print("[INFO] Loading fine-tuned DialoGPT model into RAM...")
         model_path = r"C:\Users\Pasul\OneDrive\Documents\Desktop\mental_health_chatbot\chatbot_model_small"
-        chatbot_tokenizer = AutoTokenizer.from_pretrained(model_path)
+        chatbot_tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True, force_download=True)
+        chatbot_tokenizer.padding_side = "left"  # ✅ Prevents right-padding warning
         chatbot_model = AutoModelForCausalLM.from_pretrained(model_path)
         chatbot_model.eval()
         print("[INFO] Fine-tuned DialoGPT model loaded.")

@@ -36,60 +36,85 @@ def chat():
         if len(user_input) > 300:
             return jsonify({"error": "Message too long. Please limit to 300 characters."}), 400
 
-        # Load session history
-        if "chat_history" not in session:
-            session["chat_history"] = []
-        chat_history = session["chat_history"][-10:]
+        # 🔐 Enforce correct tokenizer settings
+        tokenizer.padding_side = "left"
+        tokenizer.truncation_side = "left"
 
-        # Build prompt
+        # 🔄 Load session history
+        chat_history = session.get("chat_history", [])[-10:]
+
+        # 🧠 Build prompt using alternating speaker roles
         full_convo = ""
         for i, msg in enumerate(chat_history):
             speaker = "User" if i % 2 == 0 else "Bot"
-            full_convo += f"{speaker}: {msg} {tokenizer.eos_token} "
-        full_convo += f"User: {user_input} {tokenizer.eos_token}"
+            full_convo += f"{speaker}: {msg.strip()} {tokenizer.eos_token} "
+        full_convo += f"User: {user_input.strip()} {tokenizer.eos_token}"
 
-        # Tokenize and generate
-        inputs = tokenizer(full_convo, return_tensors='pt', padding=True, truncation=True)
+        # 📦 Tokenize
+        inputs = tokenizer(
+            full_convo,
+            return_tensors='pt',
+            padding=True,
+            truncation=True,
+            max_length=1000
+        )
         input_ids = inputs['input_ids'].to(device)
         attention_mask = inputs['attention_mask'].to(device)
 
+        # 🤖 Generate response
         output_ids = model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            max_length=1000,
-            pad_token_id=tokenizer.eos_token_id
+            max_length=min(1024, input_ids.shape[1] + 80),
+            pad_token_id=tokenizer.eos_token_id,
+            do_sample=True,
+            top_k=50,
+            top_p=0.92,
+            temperature=0.7,
+            repetition_penalty=1.3,
+            no_repeat_ngram_size=3
         )
 
+        # 🧹 Clean output
         raw_output = tokenizer.decode(output_ids[:, input_ids.shape[-1]:][0], skip_special_tokens=True)
-        cleaned_output = raw_output[len(user_input):].strip() if raw_output.lower().startswith(user_input.lower()) else raw_output.strip()
-        if not cleaned_output or len(cleaned_output.split()) < 3:
-            cleaned_output = "Thanks for sharing that. I'm here to listen—want to talk more about it?"
+        bot_output = raw_output.strip()
 
-        bot_output = cleaned_output
+        # 🔁 Avoid echoing user input
+        if bot_output.lower().startswith(user_input.lower()):
+            bot_output = bot_output[len(user_input):].strip()
 
-        # Detect mood
+        # ❌ Remove repeated words
+        bot_output = ' '.join(dict.fromkeys(bot_output.split()))
+
+        # 📏 Enforce minimum response
+        if not bot_output or len(bot_output.split()) < 3:
+            bot_output = "Thanks for sharing that. I'm here to listen—want to talk more about it?"
+
+        # 🧠 Detect mood
         try:
             emotion_result = emotion_classifier(user_input)[0]
             mood = emotion_result['label'].lower()
         except Exception:
             mood = 'neutral'
 
+        # 😊 Add emoji and tip
         emoji_icon = mood_emojis.get(mood, '😐')
         tip = tips.get(mood, '')
         if tip and tip not in bot_output:
             bot_output += f" {emoji_icon} {tip}"
 
-        # Update session
+        # 💾 Update session
         session["chat_history"] = (session.get("chat_history", []) + [user_input, bot_output])[-10:]
         session["last_detected_mood"] = mood
         session.modified = True
 
-        # Save logs
+        # 🗂 Log to DB
         user_id = current_user.id
         db.session.add(ChatLog(user_id=user_id, user_input=user_input, bot_response=bot_output, mood=mood))
         db.session.add(MoodLog(user_id=user_id, mood=mood))
         db.session.commit()
 
+        # ✅ Return JSON response
         return jsonify({
             "response": bot_output,
             "mood": mood,

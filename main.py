@@ -12,7 +12,7 @@ from flask_admin.contrib.sqla import ModelView
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from dotenv import load_dotenv
-
+import torch
 from app.routes import register_routes
 from app.database import db
 from app.models import User, ChatLog
@@ -96,6 +96,8 @@ def create_app():
     app.config['chatbot_tokenizer'] = chatbot_tokenizer
     app.config['chatbot_model'] = chatbot_model
     app.config['emotion_classifier'] = emotion_classifier
+
+    app.config['device'] = "cuda" if torch.cuda.is_available() else "cpu"
 
     return app
 
