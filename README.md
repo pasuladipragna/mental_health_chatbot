@@ -3,6 +3,18 @@
 A web-based mental health chatbot powered by a fine-tuned DialoGPT model and emotion classification. Users can chat with the bot, track moods, and visualize trends.
 
 MindEase is an AI-powered mental health chatbot that supports emotionally intelligent conversations, detects user mood in real time, suggests empathetic replies, tracks emotional trends, and allows users to export their chat history. Built using Flask, Hugging Face Transformers, and a fine-tuned DialoGPT model, it provides a safe space for mental wellness.
+![GitHub last commit](https://img.shields.io/github/last-commit/pasuladipragna/mental_health_chatbot)
+![GitHub repo size](https://img.shields.io/github/repo-size/pasuladipragna/mental_health_chatbot)
+![GitHub issues](https://img.shields.io/github/issues/pasuladipragna/mental_health_chatbot)
+![GitHub stars](https://img.shields.io/github/stars/pasuladipragna/mental_health_chatbot?style=social)
+
+> 💡 This project uses **[Git LFS](https://git-lfs.com/)** for handling large model files. After cloning, run:
+>
+> ```bash
+> git lfs install
+> git lfs pull
+> ```
+
 
 ---
 
